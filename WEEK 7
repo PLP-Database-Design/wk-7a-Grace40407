@@ -1,0 +1,146 @@
+- answers.sql
+
+-- Question 1: Achieving 1NF (First Normal Form)
+-- Splitting the Products column into individual rows
+
+-- Assuming you have a table named ProductDetail with the structure provided in the prompt:
+-- OrderID, CustomerName, Products
+
+-- This solution uses a common table expression (CTE) to split the comma-separated products into individual rows.
+-- Note: The specific syntax for string splitting varies depending on the database system (e.g., MySQL, PostgreSQL, SQL Server).  This example uses a generic approach that may need to be adapted.
+
+-- **Important: The following query assumes you're using a database that supports recursive CTEs and a string splitting function. You'll likely need to adapt it to your specific database (e.g., MySQL, PostgreSQL, SQL Server).**
+
+/*
+WITH RECURSIVE ProductDetailNormalized AS (
+    SELECT
+        OrderID,
+        CustomerName,
+        SUBSTRING(Products, 1, COALESCE(NULLIF(CHARINDEX(',', Products), 0) - 1, LENGTH(Products))) AS Product,
+        CASE
+            WHEN CHARINDEX(',', Products) > 0 THEN SUBSTRING(Products, CHARINDEX(',', Products) + 1, LENGTH(Products))
+            ELSE NULL
+        END AS RemainingProducts
+    FROM
+        ProductDetail
+    UNION ALL
+    SELECT
+        OrderID,
+        CustomerName,
+        SUBSTRING(RemainingProducts, 1, COALESCE(NULLIF(CHARINDEX(',', RemainingProducts), 0) - 1, LENGTH(RemainingProducts))),
+        CASE
+            WHEN CHARINDEX(',', RemainingProducts) > 0 THEN SUBSTRING(RemainingProducts, CHARINDEX(',', RemainingProducts) + 1, LENGTH(RemainingProducts))
+            ELSE NULL
+        END
+    FROM
+        ProductDetailNormalized
+    WHERE
+        RemainingProducts IS NOT NULL
+)
+SELECT
+    OrderID,
+    CustomerName,
+    Product
+FROM
+    ProductDetailNormalized;
+*/
+
+-- Example using a table valued function for splitting strings, more specific to SQL Server, Postgres or other database.
+-- Please use and modify one of the below or the one above to fit your database system
+
+/*
+CREATE FUNCTION dbo.SplitString (@InputString VARCHAR(MAX), @Delimiter VARCHAR(1))
+RETURNS @OutputTable TABLE ( Item VARCHAR(MAX) )
+AS
+BEGIN
+    DECLARE @StartIndex INT, @EndIndex INT
+    SET @StartIndex = 1
+    IF SUBSTRING(@InputString, LEN(@InputString) - 1, LEN(@InputString)) <> @Delimiter
+    BEGIN
+        SET @InputString = @InputString + @Delimiter
+    END
+    WHILE CHARINDEX(@Delimiter, @InputString, @StartIndex) > 0
+    BEGIN
+        SET @EndIndex = CHARINDEX(@Delimiter, @InputString, @StartIndex)
+        INSERT INTO @OutputTable (Item)
+        SELECT SUBSTRING(@InputString, @StartIndex, @EndIndex - @StartIndex)
+        SET @StartIndex = @EndIndex + 1
+    END
+    RETURN
+END;
+
+SELECT
+    pd.OrderID,
+    pd.CustomerName,
+    s.Item AS Product
+FROM
+    ProductDetail pd
+CROSS APPLY
+    dbo.SplitString(pd.Products, ',') s;
+*/
+
+--Question 2: Achieving 2NF (Second Normal Form)
+-- Separating customer information into a new table to remove partial dependency
+
+-- Create a Customers table to store customer information
+/*
+CREATE TABLE Customers (
+    OrderID INT PRIMARY KEY,
+    CustomerName VARCHAR(255)
+);
+
+-- Insert customer data into the Customers table
+INSERT INTO Customers (OrderID, CustomerName)
+SELECT DISTINCT OrderID, CustomerName
+FROM OrderDetails;
+
+-- Create a new OrderProducts table without the CustomerName column
+CREATE TABLE OrderProducts (
+    OrderID INT,
+    Product VARCHAR(255),
+    Quantity INT,
+    PRIMARY KEY (OrderID, Product),
+    FOREIGN KEY (OrderID) REFERENCES Customers(OrderID)
+);
+
+-- Insert data into the OrderProducts table
+INSERT INTO OrderProducts (OrderID, Product, Quantity)
+SELECT OrderID, Product, Quantity
+FROM OrderDetails;
+
+-- Drop the original OrderDetails table
+-- DROP TABLE OrderDetails;  (Optional: If you want to remove the original table)
+
+-- You now have two tables: Customers and OrderProducts, which are in 2NF.
+-- Customers table: OrderID (PK), CustomerName
+-- OrderProducts table: OrderID (FK), Product, Quantity
+*/
+
+-- Here's a single query that creates the tables and inserts the required data.  Note that the original table needs to be present.
+
+/*
+-- Create the Customers table and populate it with distinct OrderID and CustomerName values.
+CREATE TABLE Customers (
+    OrderID INT PRIMARY KEY,
+    CustomerName VARCHAR(255)
+);
+
+INSERT INTO Customers (OrderID, CustomerName)
+SELECT DISTINCT OrderID, CustomerName FROM OrderDetails;
+
+
+-- Create the OrderProducts table, establishing a foreign key relationship with the Customers table.
+CREATE TABLE OrderProducts (
+    OrderID INT,
+    Product VARCHAR(255),
+    Quantity INT,
+    PRIMARY KEY (OrderID, Product), -- Composite key for OrderProducts
+    FOREIGN KEY (OrderID) REFERENCES Customers(OrderID)
+);
+
+INSERT INTO OrderProducts (OrderID, Product, Quantity)
+SELECT OrderID, Product, Quantity FROM OrderDetails;
+*/
+
+-- SELECT * FROM Customers;
+-- SELECT * FROM OrderProducts;
